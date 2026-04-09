@@ -1,0 +1,110 @@
+1. Benzersiz Müşteri Sayı = DISTINCTCOUNT('clean_data (2)'[AccountID])
+
+2. Dolandırıcılık Oranı = DIVIDE([Dolandırıcılık Sayısı],[Toplam İşlem Sayısı],0)
+
+3.Dolandırıcılık Sayısı =CALCULATE(COUNTROWS('clean_data (2)'),'clean_data (2)'[IsFraud] = "Yes")
+
+4.Dolandırıcılık Zararı =CALCULATE(SUM('clean_data (2)'[Amount_Base]),'clean_data (2)'[IsFraud] = "Yes")
+
+5.Hafta Sonu Hacmi = CALCULATE([Toplam İşlem hecmi],'Calendar'[IsWeekend] = TRUE // Tarih tablonuzda böyle bir sütun olmalı)
+
+6.İlk 5 Müşteri Hacmi =VAR MUSTERI =
+    TOPN(5, ALL('clean_data (2)'[AccountID]),
+        [Toplam İşlem hecmi] , DESC) RETURN
+CALCULATE([Toplam İşlem hecmi], MUSTERI)
+
+7.İşlem Yoğunluğu Endeksi = 
+VAR gunlukortalama = 
+    CALCULATE(
+        AVERAGEX(
+            VALUES('clean_data (2)'[Date]),
+            CALCULATE(COUNTROWS('clean_data (2)'))
+        ),
+        ALL('clean_data (2)')
+    )
+VAR gunlukislem = COUNTROWS('clean_data (2)')
+RETURN
+DIVIDE(gunlukislem - gunlukortalama, gunlukortalama, 0)
+
+8.Kategori Payı = 
+DIVIDE(
+    SUM('clean_data (2)'[Amount_Base]),
+    CALCULATE(SUM('clean_data (2)'[Amount_Base]), ALL('clean_data (2)'[Category]))
+)
+
+9.Maksimum İşlem Tutarı = MAXX('clean_data (2)', 'clean_data (2)'[Amount_Base])
+
+10.Müştəri Sayı = DISTINCTCOUNT('clean_data (2)'[AccountID])
+
+11.Net Pul Axını = [Toplam Gelir]+[Toplam geri qaytarma]-[Toplam Xerc]
+
+12.Net Pul Axını (Cari Ay) = 
+VAR CariAy = 
+    CALCULATE(
+        [Net Pul Axını],
+        DATESMTD('Calendar'[Date].[Date])
+    )
+RETURN
+CariAy
+
+13.Net Pul Axını (YTD) = 
+TOTALYTD(
+    [Net Pul Axını],
+    'Calendar'[Date])
+
+14.Ortalama İşlem Tutarı = AVERAGE('clean_data (2)'[Amount_Base])
+
+15.Ortalama Üstü İşlem Sayısı = 
+VAR OrtalamaTutar = [Ortalama İşlem Tutarı]
+RETURN
+COUNTROWS(
+    FILTER(
+        'clean_data (2)',
+        'clean_data (2)'[Amount_Base] > OrtalamaTutar))
+
+16.Toplam Gelir = 
+CALCULATE(
+    SUM('clean_data (2)'[Amount_Base]),
+    'clean_data (2)'[TransactionType] = "Credit")
+
+17.Toplam geri qaytarma = 
+CALCULATE(
+    SUM('clean_data (2)'[Amount_Base]),
+    'clean_data (2)'[TransactionType] = "Refund")
+
+18.Toplam İşlem hecmi = SUM('clean_data (2)'[Amount_Base])
+
+19.Toplam İşlem Sayısı = COUNTROWS('clean_data (2)')
+
+20.Toplam Xerc = 
+CALCULATE(
+    SUM('clean_data (2)'[Amount_Base]),
+    'clean_data (2)'[TransactionType] = "Debit")
+
+-----Calendar-----
+
+Calendar = 
+VAR MinDate = MIN('clean_data (2)'[Date])
+VAR MaxDate = MAX('clean_data (2)'[Date])
+VAR Dates = CALENDAR(MinDate, MaxDate)
+RETURN
+ADDCOLUMNS(
+    Dates,
+    "Year", YEAR([Date]),
+    "Month", MONTH([Date]),
+    "MonthName", FORMAT([Date], "MMMM"),
+    "MonthShort", FORMAT([Date], "MMM"),
+    "Quarter", QUARTER([Date]),
+    "QuarterName", "Q" & QUARTER([Date]),
+    "Day", DAY([Date]),
+    "DayOfWeek", WEEKDAY([Date], 2),  -- 2 = Pazartesi=1, Pazar=7
+    "DayOfWeekName", FORMAT([Date], "DDDD"),
+    "WeekNumber", WEEKNUM([Date], 2),  -- 2 = Hafta Pazartesi başlar
+    "IsWeekend", IF(WEEKDAY([Date], 2) >= 6, 1, 0),
+    "MonthYear", FORMAT([Date], "YYYY-MM"),
+    "MonthYearName", FORMAT([Date], "YYYY MMMM"),
+    "QuarterYear", "Q" & QUARTER([Date]) & "-" & YEAR([Date]),
+    "YearMonthNumber", YEAR([Date]) * 100 + MONTH([Date])
+)
+
+
