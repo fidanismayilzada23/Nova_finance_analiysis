@@ -22,6 +22,8 @@
 ┃ ┗ 📜 nova_finance_temiz_data.csv # Təmizlənmiş data
 ┣ 📂 notebooks
 ┃ ┗ 📜 bitirme_projesi.py # Python kodu (Colab)
+┣ 📂 Sql
+┃ ┗ 📜 SQL_cod.txt  # SQL kodları
 ┣ 📂 powerbi
 ┃ ┣ 📜 Nova finance.pbix # Power BI dashboard
 ┃ ┣ 📜 Powerbi proje.pdf
