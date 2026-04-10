@@ -1,0 +1,253 @@
+
+CREATE TABLE transactions (
+    TransactionID VARCHAR(8),
+    Date DATE,
+    AccountID VARCHAR(6),
+    AccountName VARCHAR(20),
+    TransactionType VARCHAR(6),
+    Amount DECIMAL(15,2),
+    Currency VARCHAR(5),
+    ExchangeRate DECIMAL(15,6),
+    Balance DECIMAL(20,2),
+    Merchant VARCHAR(20),
+    MerchantPhone TEXT,
+    MerchantEmail TEXT,
+    Category VARCHAR(20),
+    Subcategory VARCHAR(15),
+    Country VARCHAR(10),
+    City VARCHAR(10),
+    PostalCode VARCHAR(10),
+    CardNumber TEXT,
+    Email VARCHAR(35),
+    Phone TEXT,
+    IsFraud BOOLEAN,
+    Notes TEXT,
+    Amount_Base DECIMAL(20,2),
+    Amount_Base_log TEXT,
+    IsWeekend BOOLEAN
+);
+
+--Datanı import etdik
+
+SELECT * FROM public.transactions
+-----------------
+
+SELECT 
+    COUNT(*) AS total_transactions,
+    COUNT(DISTINCT AccountID) AS unique_customers,
+    ROUND(AVG(Amount_Base), 2) AS avg_amount_base,
+    SUM(Amount_Base) AS total_spent_base,
+    MIN(Date) AS first_transaction_date,
+    MAX(Date) AS last_transaction_date
+FROM transactions
+WHERE TransactionType = 'Debit';  
+
+---------------------------------
+----Saxtakarlıq oranı ve tutarı
+-- 1.2. Saxtakarlıq ümumi statistikası
+SELECT 
+    IsFraud,
+    COUNT(*) AS transaction_sayı,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 2) AS Faizi,
+    ROUND(AVG(Amount_Base), 2) AS ortalama_saxtakarlıq_tutarı,
+    SUM(Amount_Base) AS total_saxtakarlıqdan_itki
+FROM transactions
+GROUP BY IsFraud;
+
+----------------------------------
+---Hefte içi ve hefte sonu xerclemeler.
+SELECT 
+    IsWeekend,
+    COUNT(*) AS transaction_count,
+    ROUND(AVG(Amount_Base), 2) AS avg_amount,
+    SUM(Amount_Base) AS total_amount
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY IsWeekend;
+
+-------------------------------------
+---En çox xercleme eden ilk 10 müşteri
+SELECT 
+    AccountName,
+    COUNT(*) AS tx_count,
+    SUM(Amount_Base) AS total_spent,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent,
+    MAX(Amount_Base) AS max_transaction,
+    MIN(Date) AS first_active,
+    MAX(Date) AS last_active
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY AccountName
+ORDER BY total_spent DESC
+LIMIT 10;
+
+
+-----------------------------
+---Kategoriya esaslı xercleme sırası
+SELECT 
+    Category,
+    COUNT(*) AS transaction_count,
+    SUM(Amount_Base) AS total_spent,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY Category
+ORDER BY total_spent DESC;
+-----------------------
+---RFM ANALİZİ
+/*RFM ANALİZİ AÇIQLAMASI
+Müştəri A 555 – Ən dəyərli müştəri
+Müştəri B 532 – Yeni, orta tezlikli, aşağı xərcli
+Müştəri C 111 – İtirilmiş müştəri
+*/
+-- 8.1. Hər bir müştərinin RFM skorunu hesablayıb segment təyin etmək
+WITH rfm AS (
+    SELECT 
+        AccountID,
+        MAX(Date) AS last_purchase,
+        COUNT(*) AS frequency,
+        SUM(Amount_Base) AS monetary,
+        NTILE(4) OVER (ORDER BY MAX(Date) DESC) AS recency,
+        NTILE(4) OVER (ORDER BY COUNT(*) DESC) AS frequency_score,
+        NTILE(4) OVER (ORDER BY SUM(Amount_Base) DESC) AS monetary_score
+    FROM transactions
+    WHERE TransactionType = 'Debit'
+    GROUP BY AccountID
+)
+SELECT 
+    AccountID,
+    recency,
+    frequency_score,
+    monetary_score,
+    CASE 
+        WHEN recency = 4 AND frequency_score >= 3 AND monetary_score >= 3 THEN 'VIP - Elit'
+        WHEN recency >= 3 AND frequency_score >= 3 THEN 'Premium'
+        WHEN recency >= 2 AND frequency_score >= 2 THEN 'Yüksək Orta'
+        WHEN recency >= 2 THEN 'Orta'
+        WHEN recency = 1 AND monetary_score = 1 THEN 'Təhlükədə'
+        ELSE 'Aktiv Aşağı'
+    END AS customer_segment
+FROM rfm;
+-- Hər kateqoriya üzrə əsas göstəricilər
+SELECT 
+    Category,
+    COUNT(*) AS tx_count,
+    SUM(Amount_Base) AS total_revenue,
+    ROUND(AVG(Amount_Base), 2) AS avg_ticket,
+    COUNT(DISTINCT AccountID) AS unique_customers,
+    SUM(CASE WHEN IsFraud = TRUE THEN 1 ELSE 0 END) AS fraud_cases,
+    ROUND(100.0 * SUM(CASE WHEN IsFraud = TRUE THEN 1 ELSE 0 END) / COUNT(*), 2) AS fraud_rate
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY Category
+ORDER BY total_revenue DESC;
+-----------------------
+---Aylıq xercleme trendi
+SELECT 
+    DATE_TRUNC('month', Date) AS MONTH,
+    COUNT(*) AS transaction_count,
+    SUM(Amount_Base) AS total_spent,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY MONTH
+ORDER BY MONTH;
+----------
+-----------------------------------
+--- İşem tipine göre hecim
+SELECT 
+    TransactionType,
+    COUNT(*) AS count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 2) AS percentage,
+    SUM(Amount_Base) AS total_amount
+FROM transactions
+GROUP BY TransactionType;
+
+------------------------------------
+---En aktif şeherler
+SELECT 
+    City,
+    COUNT(*) AS transaction_count,
+    SUM(Amount_Base) AS total_spent,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent
+FROM transactions
+WHERE TransactionType = 'Debit' AND City IS NOT NULL AND City != 'nan'
+GROUP BY City
+ORDER BY transaction_count DESC
+LIMIT 5
+
+-------------------------------------
+--- Müşterilerin en çox alışveriş etdiyi marketler
+SELECT 
+    Merchant,
+    COUNT(*) AS transaction_count,
+    SUM(Amount_Base) AS total_spent,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY Merchant
+ORDER BY transaction_count DESC
+LIMIT 5
+
+--------------------------------------------------
+---ortalamanın üstünde xercleme eden müşteriler.
+WITH avg_spent AS (
+    SELECT AVG(Amount_Base) AS overall_avg FROM transactions WHERE TransactionType = 'Debit'
+)
+SELECT 
+    AccountName,
+    COUNT(*) AS high_value_transactions,
+    ROUND(AVG(Amount_Base), 2) AS avg_amount
+FROM transactions, avg_spent
+WHERE TransactionType = 'Debit' 
+  AND Amount_Base > avg_spent.overall_avg
+GROUP BY AccountName
+ORDER BY high_value_transactions DESC
+LIMIT 10;
+
+----------------------------------------------
+------- rekor xercleme miqdarları
+SELECT 
+    TransactionID,
+    AccountName,
+    Date,
+    Amount_Base,
+    Category,
+    Merchant
+FROM transactions
+WHERE TransactionType = 'Debit'
+ORDER BY Amount_Base DESC
+LIMIT 10;
+
+-----------------------------------------
+--- Her müşterinin Son İşlem tarixi ve Toplam xerclemesi
+SELECT DISTINCT
+    AccountName,
+    LAST_VALUE(Date) OVER (PARTITION BY AccountName ORDER BY Date RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_transaction_date,
+    SUM(Amount_Base) OVER (PARTITION BY AccountName) AS total_spent,
+    COUNT(*) OVER (PARTITION BY AccountName) AS transaction_count
+FROM transactions
+WHERE TransactionType = 'Debit'
+ORDER BY total_spent DESC
+LIMIT 10;
+
+----------------------------------
+--------Həftə günlərinə görə ortalama xərc (Bazar=0, şenbe=6)
+SELECT 
+    EXTRACT(DOW FROM Date) AS day_of_week,
+    COUNT(*) AS tx_count,
+    ROUND(AVG(Amount_Base), 2) AS avg_spent,
+    SUM(Amount_Base) AS total_spent
+FROM transactions
+WHERE TransactionType = 'Debit'
+GROUP BY day_of_week
+ORDER BY day_of_week;
+-----------------
+----------- Saxtakarlıq olan və olmayan əməliyyatların orta məbləğ müqayisəsi (t-test üçün)
+SELECT 
+    IsFraud,
+    COUNT(*) AS n,
+    ROUND(AVG(Amount_Base), 2) AS mean_amount,
+    ROUND(STDDEV(Amount_Base), 2) AS stddev_amount
+FROM transactions
+GROUP BY IsFraud;
